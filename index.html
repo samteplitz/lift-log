@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4fa8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Adaptive Lift Log</title>
+<style>
+/* Layout: one phone-width column, sticky header, tabbed athlete view; chart series use competition plate colors */
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --sunk:#e8ecea; --ink:#18201e; --muted:#5a6562; --line:#d6dcd9;
+  --accent:#1d4fa8; --accent-ink:#ffffff; --accent-soft:#e3eaf7;
+  --red:#c42f1c; --red-soft:#fbe9e6; --yellow:#c98f05; --green:#2b7a45; --green-soft:#e4f2e8;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+  --r:10px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111514; --surface:#1a201f; --sunk:#141918; --ink:#e6ebe9; --muted:#9aa5a1; --line:#2b3432;
+  --accent:#78a2ee; --accent-ink:#0b1426; --accent-soft:#1d2a40;
+  --red:#f07160; --red-soft:#3a1f1b; --yellow:#efbf45; --green:#62c285; --green-soft:#1b3125;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111514; --surface:#1a201f; --sunk:#141918; --ink:#e6ebe9; --muted:#9aa5a1; --line:#2b3432;
+  --accent:#78a2ee; --accent-ink:#0b1426; --accent-soft:#1d2a40;
+  --red:#f07160; --red-soft:#3a1f1b; --yellow:#efbf45; --green:#62c285; --green-soft:#1b3125;
+  color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--font);-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+header.bar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
+header.bar h1{font-size:18px;margin:0;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+main{max-width:680px;margin:0 auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 96px);display:grid;gap:16px}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:var(--r);
+  padding:10px 14px;min-height:44px;cursor:pointer;font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ghost{border-color:transparent;background:transparent;color:var(--accent);padding-inline:8px}
+.danger{color:var(--red);border-color:var(--red)}
+.danger.armed{background:var(--red);color:var(--surface)}
+.icon{min-width:44px;padding:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row>*{min-width:0}
+.grow{flex:1}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.num{font-variant-numeric:tabular-nums}
+h2{font-size:17px;margin:0;text-wrap:balance}
+h3{font-size:15px;margin:0}
+section.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:grid;gap:12px;min-width:0}
+.list{display:grid;gap:10px}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:grid;gap:4px;text-align:left;width:100%;font-weight:400;min-height:0}
+.item strong{font-size:16px}
+.tabs{display:flex;gap:4px;background:var(--sunk);border-radius:var(--r);padding:4px;overflow-x:auto}
+.tabs button{flex:1;border:0;background:transparent;min-height:38px;padding:6px 10px;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+.alert{border-left:4px solid var(--red);background:var(--red-soft);border-radius:6px;padding:10px 12px;display:grid;gap:2px}
+.note{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:6px;padding:10px 12px;display:grid;gap:2px}
+.pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.chip.ex{background:var(--accent-soft);color:var(--accent)}
+.chip.ok{background:var(--green-soft);color:var(--green)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--sunk);border-radius:8px;padding:10px;display:grid;gap:2px}
+.stat b{font-size:20px;font-variant-numeric:tabular-nums}
+form,.form{display:grid;gap:14px}
+.field{display:grid;gap:5px;min-width:0}
+.field label{font-size:13px;font-weight:700;color:var(--muted)}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:44px;width:100%}
+textarea{min-height:76px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ex-card{border:1px solid var(--line);border-radius:var(--r);padding:12px;display:grid;gap:10px;background:var(--surface)}
+.setgrid{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:8px;align-items:center}
+.setgrid .h{font-size:12px;color:var(--muted);font-weight:700}
+.dots{display:inline-flex;gap:3px;vertical-align:middle}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--accent)}
+.seg{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.seg button{padding:6px;min-height:52px;display:grid;place-items:center;gap:0;line-height:1.1}
+.seg button small{font-size:10px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.seg button[aria-pressed="true"] small{color:var(--accent-ink)}
+.fab{position:fixed;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:6;box-shadow:0 4px 14px rgb(0 0 0 / .25);border-radius:999px;padding-inline:20px}
+.chart{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font:11px var(--font);font-variant-numeric:tabular-nums}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.empty{text-align:center;padding:28px 12px;color:var(--muted);display:grid;gap:10px;justify-items:center}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);background:var(--ink);color:var(--bg);
+  padding:10px 16px;border-radius:999px;font-weight:600;z-index:9;max-width:calc(100% - 32px);text-align:center}
+.plate{display:inline-block;width:10px;height:22px;border-radius:3px;margin-right:2px;vertical-align:middle}
+@media (prefers-reduced-motion:no-preference){.item,button{transition:background .15s,border-color .15s}}
+</style>
+</head>
+<body>
+<header class="bar" id="bar"></header>
+<main id="app"></main>
+<div id="toast" hidden></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+<script>
+"use strict";
+const KEY='adaptive-lift-log-v1';
+const ASSIST=['Independent','Verbal cue','Demo / visual','Light physical','Full physical'];
+const ENGAGE=['Shut down','Reluctant','OK','Engaged','Locked in'];
+const PLATES=['var(--accent)','var(--red)','var(--yellow)','var(--green)'];
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>iso(new Date());
+const parseD=s=>new Date(s+'T12:00:00');
+const fmtD=s=>parseD(s).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+const fmtDL=s=>parseD(s).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+const num=v=>{const n=parseFloat(v);return isFinite(n)?n:0};
+const r1=v=>Math.round(v*10)/10;
+function weekStart(s){const d=parseD(s);const k=(d.getDay()+6)%7;d.setDate(d.getDate()-k);return iso(d)}
+const norm=s=>String(s||'').trim().toLowerCase();
+
+/* ---------- storage ---------- */
+let storageOK=true;
+let db=load();
+function load(){
+  try{const raw=localStorage.getItem(KEY);if(raw){const d=JSON.parse(raw);if(d&&d.athletes)return d}}catch(e){storageOK=false}
+  const d=seed();try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){storageOK=false}
+  return d;
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(db));storageOK=true}catch(e){storageOK=false;toast('Could not save on this device. Export a backup from Settings.')}}
+
+function seed(){
+  const a={id:uid(),example:true,name:'Jordan R. (example)',dob:'2004-03-14',sport:'Powerlifting · Special Olympics',events:'Squat, Bench, Deadlift',
+    disabilities:'Down syndrome. Low muscle tone, hypermobile elbows. Mild hearing loss in left ear.',
+    precautions:'Cervical spine cleared by physician (2026). Still avoid loaded neck flexion.\nSpotter on every bench set.\nCheck in on hydration in the heat.',
+    communication:'Stand on his right side. Short 2–3 word cues ("chest up", "push floor"). Demo first, then let him try.',
+    sensory:'Startles at dropped plates. Warn before racking loud. Earbuds with his music help him settle.',
+    motivators:'High-fives, choosing the warm-up song, sticker on his chart after a PR.',
+    goals:'Bench 135 lb at State Games (May). Independent setup on squat.',
+    emergency:'Mom (Dana): 480-555-0142',created:'2026-08-10'};
+  const ex=[['Back squat',3,5,95],['Bench press',3,5,85],['Deadlift',2,3,135],['Box step-up',2,8,0]].map(([name,sets,reps,load])=>({id:uid(),name,sets,reps,load,notes:''}));
+  ex[1].notes='Spotter hands-on at lockout';ex[3].notes='Bodyweight, 16" box';
+  const p={id:uid(),athleteId:a.id,name:'Meet prep A',focus:'Competition lifts, 2×/week',exercises:ex};
+  const sessions=[];const start=parseD('2026-08-17');const eng=[4,3,5,4,2,4,5,4,4,3,5,4,5,4,4,5];
+  let i=0;
+  for(let w=0;w<8;w++)for(const off of[0,3]){
+    const d=new Date(start);d.setDate(d.getDate()+w*7+off);const ds=iso(d);if(ds>today())continue;
+    const e=eng[i%eng.length];const bad=e<=2;
+    const loads=[95+w*5,85+Math.floor(w/2)*5+(w>5?2.5:0),135+w*10,0];
+    const entries=ex.map((x,k)=>{
+      let L=loads[k];if(bad&&k<3)L=Math.max(x.load,L-10);
+      const sets=Array.from({length:x.sets},(_,j)=>({reps:(bad&&j===x.sets-1&&k<3)?x.reps-2:x.reps,load:L}));
+      const assist=k===0?(w<3?1:0):k===1?(w<4?2:1):k===2?1:0;
+      return{name:x.name,sets,assist};
+    });
+    sessions.push({id:uid(),athleteId:a.id,planId:p.id,date:ds,entries,engagement:e,effort:bad?6:7+(w%3===0?1:0),
+      notes:bad?'Gym was loud (basketball next door). Cut last set short, ended on a good rep.':(e===5?'Great focus. Asked to add weight himself.':'')});
+    i++;
+  }
+  return{v:1,unit:'lb',lastBackup:null,athletes:[a],plans:[p],sessions};
+}
+
+/* ---------- helpers ---------- */
+const ath=id=>db.athletes.find(a=>a.id===id);
+const plansOf=id=>db.plans.filter(p=>p.athleteId===id);
+const SHARED='shared';
+const libPlans=()=>db.plans.filter(p=>p.athleteId===SHARED).sort((x,y)=>x.name.localeCompare(y.name));
+const usablePlans=id=>[...plansOf(id),...libPlans()];
+const sessOf=id=>db.sessions.filter(s=>s.athleteId===id).sort((a,b)=>b.date.localeCompare(a.date));
+function age(dob){if(!dob)return'';const b=parseD(dob),n=new Date();let a=n.getFullYear()-b.getFullYear();if(n.getMonth()<b.getMonth()||(n.getMonth()===b.getMonth()&&n.getDate()<b.getDate()))a--;return a}
+const U=()=>db.unit;
+const fmtLoad=v=>v?`${r1(v)} ${U()}`:'BW';
+function dots(n){return`<span class="dots" aria-label="Engagement ${n} of 5">${[1,2,3,4,5].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}</span>`}
+function topSet(entry){let b=null;for(const s of entry.sets){if(!b||num(s.load)>num(b.load)||(num(s.load)===num(b.load)&&num(s.reps)>num(b.reps)))b=s}return b}
+function sessSummary(s){return s.entries.filter(e=>e.sets.length).slice(0,3).map(e=>{const t=topSet(e);return`${esc(e.name)} ${t.load?r1(num(t.load)):'BW'}×${num(t.reps)}`}).join(' · ')}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2600)}
+
+function backupDue(){if(!db.athletes.some(a=>!a.example))return false;if(!db.lastBackup)return true;return(parseD(today())-parseD(db.lastBackup))/864e5>=14}
+/* ---------- routing ---------- */
+let draft=null; // {key, data}
+function go(h){location.hash=h}
+function replaceTo(h){draft=null;location.replace(location.href.split('#')[0]+h)}
+function parts(){return location.hash.replace(/^#/,'').split('/').filter(Boolean)}
+window.addEventListener('hashchange',render);
+
+function render(){
+  const [v0,a,b]=parts();const [v,q]=(v0||'').split('?');
+  let out;
+  if(!v)out=vRoster();
+  else if(v==='settings')out=vSettings();
+  else if(v==='library')out=vLibrary();
+  else if(v==='group')out=a==='run'?vGroupRun():vGroupSetup(q);
+  else if(v==='plan'&&a===SHARED)out=vPlan(a,b);
+  else if(v==='athlete'&&ath(a))out=vAthlete(a,b||'overview');
+  else if(v==='edit-athlete')out=vEditAthlete(a);
+  else if(v==='plan'&&ath(a))out=vPlan(a,b);
+  else if(v==='session'&&ath(a))out=vSession(a,b);
+  else out=vRoster();
+  $('#bar').innerHTML=out.bar;$('#app').innerHTML=out.body;
+  document.querySelectorAll('.fab').forEach(f=>f.remove());
+  if(out.fab)document.body.insertAdjacentHTML('beforeend',out.fab);
+  if(out.after)out.after();
+}
+const back=h=>`<button class="ghost icon" data-go="${h}" aria-label="Back">&larr;</button>`;
+
+/* ---------- roster ---------- */
+function vRoster(){
+  const wk=weekStart(today());
+  const items=db.athletes.slice().sort((x,y)=>x.name.localeCompare(y.name)).map(a=>{
+    const ss=sessOf(a.id);const last=ss[0];const thisWk=ss.filter(s=>weekStart(s.date)===wk).length;
+    return`<button class="item" data-go="#athlete/${a.id}">
+      <div class="row"><strong class="grow">${esc(a.name)}</strong>${a.example?'<span class="chip ex">Example</span>':''}</div>
+      <span class="muted small">${esc(a.sport||'No sport set')}</span>
+      <span class="small num">${last?`Last session ${fmtD(last.date)} · ${thisWk} this week`:'No sessions yet'}</span>
+      ${a.precautions?`<span class="small" style="color:var(--red)">⚠ ${esc(a.precautions.split('\n')[0])}</span>`:''}
+    </button>`}).join('');
+  return{
+    bar:`<h1>Athletes</h1><button class="ghost" data-go="#library">Plan library</button><button class="ghost" data-go="#settings">Settings</button>`,
+    body:`${!storageOK?`<div class="alert"><b>Saving is blocked in this browser.</b><span class="small">Open the file in Chrome, or export a backup before closing.</span></div>`:''}
+      ${backupDue()?`<button class="item" data-go="#settings" style="border-color:var(--yellow)"><strong>Time to back up</strong><span class="small muted">${db.lastBackup?'Last backup '+fmtDL(db.lastBackup):'You have not exported a backup yet'}. Your records live only on this phone.</span></button>`:''}
+      ${db.athletes.some(a=>a.example)?`<div class="note small"><b>Jordan is sample data</b><span>Explore the tabs to see how it works, then remove him in Backup &amp; settings.</span></div>`:''}
+      ${db.athletes.length?`<button class="item" data-go="#group" style="border-color:var(--accent)"><div class="row"><strong class="grow" style="color:var(--accent)">Start group session</strong><span aria-hidden="true">&rarr;</span></div><span class="muted small">Log one plan for several athletes, one after another</span></button>`:''}
+      <div class="list">${items||`<div class="empty"><b>No athletes yet</b><span>Add your first athlete profile to start planning and logging.</span></div>`}</div>`,
+    fab:`<button class="primary fab" data-go="#edit-athlete/new">+ Athlete</button>`
+  };
+}
+
+/* ---------- athlete ---------- */
+function vAthlete(id,tab){
+  const a=ath(id);const tabs=[['overview','Profile'],['plans','Plans'],['log','Sessions'],['trends','Trends']];
+  let body=`<div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button role="tab" aria-selected="${k===tab}" data-replace="#athlete/${id}/${k}">${l}</button>`).join('')}</div>`;
+  body+= tab==='plans'?tPlans(a):tab==='log'?tLog(a):tab==='trends'?tTrends(a):tOverview(a);
+  return{bar:`${back('#')}<h1>${esc(a.name)}</h1>`,body,fab:`<button class="primary fab" data-go="#session/${id}/new">+ Log session</button>`,after:tab==='trends'?bindTrends:null};
+}
+function block(label,text,cls){return text?`<div class="${cls||''}"><span class="label">${label}</span><div class="pre">${esc(text)}</div></div>`:''}
+function tOverview(a){
+  const ss=sessOf(a.id);const wk=weekStart(today());
+  return`
+  <section class="panel">
+    <h2>Before you train</h2>
+    ${a.precautions?`<div class="alert"><span class="label" style="color:var(--red)">Precautions</span><div class="pre">${esc(a.precautions)}</div></div>`:'<span class="muted small">No precautions recorded.</span>'}
+    ${block('Communication',a.communication,'note')}
+    ${block('Sensory needs',a.sensory,'note')}
+  </section>
+  <div class="stats">
+    <div class="stat"><span class="label">Sessions</span><b>${ss.length}</b></div>
+    <div class="stat"><span class="label">This week</span><b>${ss.filter(s=>weekStart(s.date)===wk).length}</b></div>
+    <div class="stat"><span class="label">Last</span><b style="font-size:16px">${ss[0]?fmtD(ss[0].date):'—'}</b></div>
+  </div>
+  <section class="panel">
+    <h2>Profile</h2>
+    ${a.dob?`<div><span class="label">Age</span><div class="num">${age(a.dob)} (born ${fmtDL(a.dob)})</div></div>`:''}
+    ${block('Disabilities &amp; diagnoses',a.disabilities)}
+    ${block('Sport',a.sport)}${block('Events',a.events)}
+    ${block('Goals',a.goals)}${block('Motivators',a.motivators)}
+    ${block('Emergency contact',a.emergency)}
+    <div class="row"><button data-go="#edit-athlete/${a.id}">Edit profile</button></div>
+  </section>`;
+}
+function planCard(p,actions){
+  return`<section class="panel">
+    <div class="row"><div class="grow"><h2>${esc(p.name)}</h2>${p.focus?`<span class="muted small">${esc(p.focus)}</span>`:''}</div>${p.athleteId===SHARED?'<span class="chip ex">Library</span>':''}</div>
+    <div class="tablewrap"><table><thead><tr><th>Exercise</th><th>Sets×Reps</th><th>Load</th></tr></thead><tbody>
+    ${p.exercises.map(x=>`<tr><td style="white-space:normal">${esc(x.name)}${x.notes?`<div class="muted small">${esc(x.notes)}</div>`:''}</td><td>${num(x.sets)}×${num(x.reps)}</td><td>${fmtLoad(num(x.load))}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="row">${actions}</div>
+  </section>`;
+}
+function tPlans(a){
+  const ps=plansOf(a.id);const lib=libPlans();
+  return`<div class="row"><span class="grow muted small">${ps.length} plan${ps.length===1?'':'s'} for ${esc(a.name.split(' ')[0])}</span><button data-go="#plan/${a.id}/new">+ New plan</button></div>
+  <div class="list">${ps.map(p=>planCard(p,`<button class="primary" data-go="#session/${a.id}/new?plan=${p.id}">Log with this plan</button><button data-go="#plan/${a.id}/${p.id}">Edit</button>`)).join('')||`<div class="empty"><b>No personal plans yet</b><span>Build a plan just for this athlete, or use one from the plan library below.</span></div>`}</div>
+  <div class="row"><h2 class="grow">From the plan library</h2><button class="ghost" data-go="#library">Manage</button></div>
+  <div class="list">${lib.map(p=>planCard(p,`<button class="primary" data-go="#session/${a.id}/new?plan=${p.id}">Log with this plan</button>`)).join('')||`<div class="empty small"><span>No library plans yet. Library plans are shared by every athlete.</span><button data-go="#plan/${SHARED}/new">+ New library plan</button></div>`}</div>`;
+}
+function vLibrary(){
+  const lib=libPlans();
+  return{bar:`${back('#')}<h1>Plan library</h1>`,
+    body:`<div class="note small"><b>Shared by every athlete</b><span>Build the week's plans here once. They appear in the Plan list on every athlete's Log session page. Adding or removing exercises while logging changes only that session, never the library plan.</span></div>
+    <div class="list">${lib.map(p=>planCard(p,`<button class="primary" data-go="#group?plan=${p.id}">Log for a group</button><button data-go="#plan/${SHARED}/${p.id}">Edit</button>`)).join('')||`<div class="empty"><b>No library plans yet</b><span>Create a plan like “Week 6 · Day A” to log it for anyone in the group.</span></div>`}</div>`,
+    fab:`<button class="primary fab" data-go="#plan/${SHARED}/new">+ Library plan</button>`};
+}
+function tLog(a){
+  const ss=sessOf(a.id);
+  return ss.length?`<div class="list">${ss.map(s=>{const p=db.plans.find(x=>x.id===s.planId);return`<button class="item" data-go="#session/${a.id}/${s.id}">
+    <div class="row"><strong class="grow num">${fmtDL(s.date)}</strong>${dots(s.engagement||0)}</div>
+    <span class="muted small">${esc(p?p.name:'Custom session')}${s.effort?` · Effort ${s.effort}/10`:''}</span>
+    <span class="small num">${sessSummary(s)}</span>
+    ${s.notes?`<span class="small muted pre">${esc(s.notes)}</span>`:''}
+  </button>`}).join('')}</div>`:`<div class="empty"><b>No sessions logged</b><span>Tap “Log session” after training to record sets, assist level and engagement.</span></div>`;
+}
+
+/* ---------- trends ---------- */
+let trendSel={ex:null,metric:null};
+function exNames(a){const m=new Map();for(const s of sessOf(a.id))for(const e of s.entries){const k=norm(e.name);if(k&&!m.has(k))m.set(k,e.name.trim())}return[...m.entries()]}
+function weekly(a,exKey){
+  const by=new Map();
+  for(const s of sessOf(a.id).slice().reverse()){
+    const w=weekStart(s.date);if(!by.has(w))by.set(w,{week:w,sessions:0,eng:[],top:0,topReps:0,vol:0,reps:0,assist:[],has:false});
+    const o=by.get(w);o.sessions++;if(s.engagement)o.eng.push(s.engagement);
+    for(const e of s.entries){if(norm(e.name)!==exKey)continue;o.has=true;o.assist.push(e.assist??0);
+      for(const st of e.sets){const L=num(st.load),R=num(st.reps);if(L>o.top||(L===o.top&&R>o.topReps)){o.top=L;o.topReps=R}o.vol+=L*R;o.reps+=R}}
+  }
+  return[...by.values()];
+}
+function mode(arr){const c={};let b=null;for(const x of arr){c[x]=(c[x]||0)+1;if(b===null||c[x]>c[b])b=x}return b}
+function tTrends(a){
+  const names=exNames(a);
+  if(!names.length)return`<div class="empty"><b>No data to trend yet</b><span>Charts appear after the first logged session.</span></div>`;
+  if(!trendSel.ex||!names.some(([k])=>k===trendSel.ex))trendSel.ex=names[0][0];
+  const wk=weekly(a,trendSel.ex);const exW=wk.filter(w=>w.has);
+  const loaded=exW.some(w=>w.top>0);
+  if(!trendSel.metric||(!loaded&&trendSel.metric!=='reps'))trendSel.metric=loaded?'top':'reps';
+  const M={top:['Top set',w=>w.top,v=>`${r1(v)}`],vol:['Volume',w=>w.vol,v=>Math.round(v).toLocaleString()],reps:['Total reps',w=>w.reps,v=>`${Math.round(v)}`]};
+  const [mLabel,mGet,mFmt]=M[trendSel.metric];
+  const pts=exW.map(w=>({label:fmtD(w.week),value:mGet(w)}));
+  const first=pts[0],last=pts[pts.length-1];const delta=pts.length>1?last.value-first.value:0;
+  const engPts=wk.filter(w=>w.eng.length).map(w=>({label:fmtD(w.week),value:w.eng.reduce((x,y)=>x+y,0)/w.eng.length}));
+  const unitTxt=trendSel.metric==='reps'?'reps':trendSel.metric==='vol'?`${U()} × reps`:U();
+  return`
+  <section class="panel">
+    <div class="field"><label for="trEx">Exercise</label><select id="trEx">${names.map(([k,n])=>`<option value="${esc(k)}" ${k===trendSel.ex?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
+    <div class="tabs" role="tablist">${Object.entries(M).filter(([k])=>loaded||k==='reps').map(([k,[l]])=>`<button role="tab" aria-selected="${k===trendSel.metric}" data-metric="${k}">${l}</button>`).join('')}</div>
+    <div class="row"><div class="grow"><span class="label">${mLabel} by week</span>
+      <div class="num" style="font-size:22px;font-weight:700">${last?mFmt(last.value):'—'} <span class="muted small" style="font-weight:600">${unitTxt}</span></div></div>
+      ${pts.length>1?`<span class="chip ${delta>0?'ok':''} num">${delta>=0?'+':''}${mFmt(delta)} since ${first.label}</span>`:''}</div>
+    ${chart(pts,{color:PLATES[0],fmt:mFmt})}
+  </section>
+  <section class="panel">
+    <div><span class="label">Engagement by week</span><div class="muted small">Average of session ratings, 1 = shut down, 5 = locked in</div></div>
+    ${chart(engPts,{color:PLATES[3],lo:1,hi:5,step:1,fmt:v=>r1(v)})}
+  </section>
+  <section class="panel">
+    <h2>Week by week</h2>
+    <div class="tablewrap"><table><thead><tr><th>Week of</th><th>Sess.</th><th>Top set</th><th>Volume</th><th>Usual assist</th><th>Engage</th></tr></thead><tbody>
+    ${wk.slice().reverse().map(w=>`<tr><td>${fmtD(w.week)}</td><td>${w.sessions}</td><td>${w.has?(w.top?`${r1(w.top)}×${w.topReps}`:`BW×${w.topReps}`):'—'}</td><td>${w.has&&w.vol?Math.round(w.vol).toLocaleString():'—'}</td><td>${w.has?ASSIST[mode(w.assist)]:'—'}</td><td>${w.eng.length?r1(w.eng.reduce((x,y)=>x+y,0)/w.eng.length):'—'}</td></tr>`).join('')}
+    </tbody></table></div>
+  </section>`;
+}
+function bindTrends(){
+  const s=$('#trEx');if(s)s.onchange=()=>{trendSel.ex=s.value;trendSel.metric=null;render()};
+  document.querySelectorAll('[data-metric]').forEach(b=>b.onclick=()=>{trendSel.metric=b.dataset.metric;render()});
+}
+function nice(x){const p=Math.pow(10,Math.floor(Math.log10(x)));const f=x/p;return(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p}
+function chart(pts,o){
+  if(!pts.length)return`<div class="empty small">No data yet</div>`;
+  const W=340,H=190,pl=42,pr=16,pt=22,pb=28;const vals=pts.map(p=>p.value);
+  let lo,hi,step;
+  if(o.lo!=null){lo=o.lo;hi=o.hi;step=o.step}
+  else{let mn=Math.min(...vals),mx=Math.max(...vals);if(mn===mx){mn=mn-Math.max(1,Math.abs(mn)*.1);mx=mx+Math.max(1,Math.abs(mx)*.1)}
+    step=nice((mx-mn)/4);lo=Math.floor(mn/step)*step;hi=Math.ceil(mx/step)*step;if(lo<0&&Math.min(...vals)>=0)lo=0}
+  const n=pts.length;const X=i=>n===1?pl+(W-pl-pr)/2:pl+i*(W-pl-pr)/(n-1);const Y=v=>pt+(H-pt-pb)*(1-(v-lo)/(hi-lo));
+  let g='';for(let v=lo;v<=hi+1e-9;v+=step){const y=Y(v);g+=`<line class="grid" x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}"/><text x="${pl-6}" y="${y+4}" text-anchor="end">${o.fmt?o.fmt(v):v}</text>`}
+  const k=Math.ceil(n/5);let xl='';pts.forEach((p,i)=>{if(i%k===0||i===n-1){if(i!==n-1&&n-1-i<k&&i!==0)return;xl+=`<text x="${X(i)}" y="${H-8}" text-anchor="${n===1?'middle':i===0?'start':i===n-1?'end':'middle'}">${esc(p.label)}</text>`}});
+  const line=pts.map((p,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(p.value).toFixed(1)}`).join(' ');
+  const area=n>1?`<path d="${line} L${X(n-1)} ${H-pb} L${X(0)} ${H-pb} Z" fill="${o.color}" opacity=".12"/>`:'';
+  const lx=X(n-1),ly=Y(pts[n-1].value);
+  return`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Weekly chart">${g}${area}
+    <path d="${line}" fill="none" stroke="${o.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.value)}" r="${i===n-1?5:3}" fill="${i===n-1?o.color:'var(--surface)'}" stroke="${o.color}" stroke-width="2"/>`).join('')}
+    <text x="${Math.min(lx,W-pr)}" y="${Math.max(ly-10,12)}" text-anchor="end" style="fill:var(--ink);font-weight:700">${o.fmt?o.fmt(pts[n-1].value):pts[n-1].value}</text>
+    ${xl}</svg>`;
+}
+
+/* ---------- edit athlete ---------- */
+const AF=[['name','Name','input'],['dob','Date of birth','date'],['sport','Sport / program','input','e.g. Powerlifting · Special Olympics'],['events','Events','input','e.g. Squat, Bench, Deadlift'],
+  ['disabilities','Disabilities & diagnoses','text','What you need to know about their disability and how it affects training'],
+  ['precautions','Precautions & contraindications','text','Medical clearances, movements to avoid, spotting rules. One per line; the first line shows on the roster.'],
+  ['communication','Communication','text','How they take cues best: verbal, demo, visual cards, sign'],
+  ['sensory','Sensory needs','text','Noise, lighting, touch, triggers and what helps them settle'],
+  ['motivators','Motivators','text'],['goals','Goals','text'],['emergency','Emergency contact','input']];
+function vEditAthlete(id){
+  const isNew=id==='new';const a=isNew?{}:ath(id);if(!a)return vRoster();
+  const key='a:'+id;if(!draft||draft.key!==key)draft={key,data:{...a}};const d=draft.data;
+  const f=AF.map(([k,l,t,ph])=>`<div class="field"><label for="f_${k}">${l}</label>${t==='text'?
+    `<textarea id="f_${k}" data-f="${k}" placeholder="${esc(ph||'')}">${esc(d[k]||'')}</textarea>`:
+    `<input id="f_${k}" data-f="${k}" type="${t==='date'?'date':'text'}" value="${esc(d[k]||'')}" placeholder="${esc(ph||'')}">`}</div>`).join('');
+  return{bar:`${back(isNew?'#':'#athlete/'+id)}<h1>${isNew?'New athlete':'Edit profile'}</h1><button class="primary" data-act="save-athlete" data-id="${id}">Save</button>`,
+    body:`<section class="panel form">${f}</section>${isNew?'':`<section class="panel"><h3>Remove athlete</h3><span class="muted small">Deletes this profile, its plans and every logged session.</span><div><button class="danger" data-act="del-athlete" data-id="${id}">Delete athlete</button></div></section>`}`};
+}
+
+/* ---------- plan editor ---------- */
+function vPlan(aid,pid){
+  const isNew=!pid||pid==='new';const key='p:'+aid+':'+pid;
+  if(!draft||draft.key!==key){const p=isNew?{name:'',focus:'',exercises:[{id:uid(),name:'',sets:3,reps:5,load:'',notes:''}]}:db.plans.find(x=>x.id===pid);
+    if(!p)return vAthlete(aid,'plans');draft={key,data:JSON.parse(JSON.stringify(p))}}
+  const d=draft.data;const shared=aid===SHARED;
+  return{bar:`${back(shared?'#library':'#athlete/'+aid+'/plans')}<h1>${isNew?(shared?'New library plan':'New plan'):(shared?'Edit library plan':'Edit plan')}</h1><button class="primary" data-act="save-plan" data-a="${aid}" data-id="${pid||'new'}">Save</button>`,
+  body:`${shared?'<div class="note small"><span>Library plans are available to every athlete.</span></div>':''}<section class="panel form">
+    <div class="field"><label for="p_name">Plan name</label><input id="p_name" data-f="name" value="${esc(d.name)}" placeholder="e.g. Meet prep A"></div>
+    <div class="field"><label for="p_focus">Focus</label><input id="p_focus" data-f="focus" value="${esc(d.focus)}" placeholder="e.g. Competition lifts, 2×/week"></div>
+  </section>
+  ${d.exercises.map((x,i)=>`<div class="ex-card">
+    <div class="row"><span class="label grow">Exercise ${i+1}</span><button class="ghost" data-act="ex-rm" data-i="${i}" aria-label="Remove exercise">Remove</button></div>
+    <div class="field"><label for="x${i}n">Name</label><input id="x${i}n" data-f="exercises.${i}.name" value="${esc(x.name)}" placeholder="e.g. Back squat" list="exlist"></div>
+    <div class="two" style="grid-template-columns:1fr 1fr 1.3fr">
+      <div class="field"><label for="x${i}s">Sets</label><input id="x${i}s" inputmode="numeric" data-f="exercises.${i}.sets" value="${esc(x.sets)}"></div>
+      <div class="field"><label for="x${i}r">Reps</label><input id="x${i}r" inputmode="numeric" data-f="exercises.${i}.reps" value="${esc(x.reps)}"></div>
+      <div class="field"><label for="x${i}l">Load (${U()})</label><input id="x${i}l" inputmode="decimal" data-f="exercises.${i}.load" value="${esc(x.load)}" placeholder="0 = BW"></div>
+    </div>
+    <div class="field"><label for="x${i}t">Coaching notes / modifications</label><input id="x${i}t" data-f="exercises.${i}.notes" value="${esc(x.notes)}" placeholder="e.g. Box squat to 18&quot; box"></div>
+  </div>`).join('')}
+  <datalist id="exlist">${['Back squat','Box squat','Goblet squat','Bench press','Dumbbell bench','Deadlift','Trap bar deadlift','Romanian deadlift','Box step-up','Lat pulldown','Seated row','Farmer carry','Plank hold'].map(n=>`<option value="${n}">`).join('')}</datalist>
+  <div class="row"><button data-act="ex-add">+ Add exercise</button></div>
+  ${isNew?'':`<section class="panel"><span class="muted small">Logged sessions stay in history if you delete this plan.</span><div><button class="danger" data-act="del-plan" data-a="${aid}" data-id="${pid}">Delete plan</button></div></section>`}`};
+}
+
+/* ---------- session editor ---------- */
+function lastEntry(aid,name){const k=norm(name);for(const s of sessOf(aid)){const e=s.entries.find(x=>norm(x.name)===k);if(e&&e.sets.length)return e}return null}
+function entriesFromPlan(p,aid){
+  if(!p)return[{name:'',assist:0,sets:[{reps:'',load:''}]}];
+  const personalize=aid&&p.athleteId===SHARED;
+  return p.exercises.map(x=>{let load=x.load,assist=0,fromLast=false;
+    if(personalize){const le=lastEntry(aid,x.name);if(le){assist=le.assist||0;const t=topSet(le);if(t&&num(t.load)>0){load=t.load;fromLast=true}}}
+    return{name:x.name,assist,fromLast,sets:Array.from({length:Math.max(1,num(x.sets))},()=>({reps:x.reps,load}))}});
+}
+function sessionForm(aid,d,P,group){
+  const own=plansOf(aid),lib=libPlans(),ps=[...own,...lib];
+  const opt=p=>`<option value="${p.id}" ${p.id===d.planId?'selected':''}>${esc(p.name)}</option>`;
+  const orphan=d.planId&&!ps.some(p=>p.id===d.planId)?`<option value="${esc(d.planId)}" selected>Deleted plan</option>`:'';
+  const picked=ps.find(p=>p.id===d.planId);
+  return`<section class="panel form">
+    <div class="${group?'':'two'}">
+      ${group?'':`<div class="field"><label for="s_date">Date</label><input id="s_date" type="date" data-f="${P}date" value="${esc(d.date)}"></div>`}
+      <div class="field"><label for="s_plan">Plan</label><select id="s_plan" data-act-change="pick-plan" data-aid="${aid}"><option value="">Custom</option>${orphan}
+        ${own.length?`<optgroup label="${esc(ath(aid).name.split(' ')[0])}'s plans">${own.map(opt).join('')}</optgroup>`:''}
+        ${lib.length?`<optgroup label="Plan library">${lib.map(opt).join('')}</optgroup>`:''}</select></div>
+    </div>
+    ${picked?`<span class="muted small">Add, remove or change exercises below. Changes apply to this session only; ${picked.athleteId===SHARED?'the library plan':'the plan'} stays as built.${picked.athleteId===SHARED?' Loads marked “from last session” use this athlete’s most recent top set.':''}</span>`:''}
+  </section>
+  ${d.entries.map((e,i)=>`<div class="ex-card">
+    <div class="row"><input aria-label="Exercise name" class="grow" style="font-weight:700;flex:1 1 160px" data-f="${P}entries.${i}.name" value="${esc(e.name)}" placeholder="Exercise" list="exlist2"><button class="ghost" data-act="en-rm" data-i="${i}">Remove</button></div>
+    ${e.fromLast?'<span class="chip ok" style="justify-self:start">Load from last session</span>':''}
+    <div class="setgrid"><span class="h">Set</span><span class="h">Reps</span><span class="h">Load (${U()})</span><span></span>
+    ${e.sets.map((s,j)=>`<span class="num muted" style="text-align:center">${j+1}</span>
+      <input aria-label="Set ${j+1} reps" inputmode="numeric" data-f="${P}entries.${i}.sets.${j}.reps" value="${esc(s.reps)}">
+      <input aria-label="Set ${j+1} load" inputmode="decimal" data-f="${P}entries.${i}.sets.${j}.load" value="${esc(s.load)}" placeholder="BW">
+      <button class="ghost icon" data-act="set-rm" data-i="${i}" data-j="${j}" aria-label="Remove set ${j+1}">✕</button>`).join('')}
+    </div>
+    <div class="row"><button data-act="set-add" data-i="${i}">+ Set</button>
+      <div class="field grow" style="flex:1 1 150px"><label for="as${i}">Assist level</label><select id="as${i}" data-f="${P}entries.${i}.assist" data-num="1">${ASSIST.map((l,k)=>`<option value="${k}" ${k==e.assist?'selected':''}>${l}</option>`).join('')}</select></div></div>
+  </div>`).join('')}
+  <datalist id="exlist2">${[...new Set(db.plans.filter(p=>p.athleteId===aid||p.athleteId===SHARED).flatMap(p=>p.exercises.map(x=>x.name)))].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+  <div class="row"><button data-act="en-add">+ Add exercise</button></div>
+  <section class="panel form">
+    <div class="field"><span class="label">Engagement today</span><div class="seg" role="group" aria-label="Engagement">${ENGAGE.map((l,k)=>`<button aria-pressed="${d.engagement===k+1}" data-act="eng" data-v="${k+1}"><b>${k+1}</b><small>${l}</small></button>`).join('')}</div></div>
+    <div class="field"><label for="s_eff">Effort (RPE 1–10)</label><select id="s_eff" data-f="${P}effort"><option value="">Not rated</option>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option ${String(n)===String(d.effort)?'selected':''}>${n}</option>`).join('')}</select></div>
+    <div class="field"><label for="s_notes">Session notes</label><textarea id="s_notes" data-f="${P}notes" placeholder="Behavior, what cues worked, anything to change next time">${esc(d.notes)}</textarea></div>
+  </section>`;
+}
+function vSession(aid,sidRaw){
+  const [sid,q]=(sidRaw||'new').split('?');const isNew=sid==='new';const key='s:'+aid+':'+sidRaw;
+  if(!draft||draft.key!==key){
+    let s;if(isNew){const ps=usablePlans(aid);const want=(q||'').replace('plan=','');const p=ps.find(x=>x.id===want)||ps[0];
+      s={date:today(),planId:p?p.id:'',entries:entriesFromPlan(p,aid),engagement:0,effort:'',notes:''};}
+    else{s=db.sessions.find(x=>x.id===sid);if(!s)return vAthlete(aid,'log');s=JSON.parse(JSON.stringify(s))}
+    draft={key,data:s}}
+  const d=draft.data;
+  return{bar:`${back('#athlete/'+aid+'/log')}<h1>${isNew?'Log session':'Edit session'}</h1><button class="primary" data-act="save-session" data-a="${aid}" data-id="${sid}">Save</button>`,
+  body:`<div class="muted small" style="margin-bottom:-8px">${esc(ath(aid).name)}</div>
+  ${sessionForm(aid,d,'',false)}
+  ${isNew?'':`<div><button class="danger" data-act="del-session" data-a="${aid}" data-id="${sid}">Delete session</button></div>`}`};
+}
+function saveSession(aid,d,id){
+  if(!d.date){toast('Pick a date');return null}
+  const entries=d.entries.filter(en=>String(en.name).trim()).map(en=>({name:en.name.trim(),assist:Number(en.assist)||0,
+    sets:en.sets.filter(s=>String(s.reps).trim()!=='').map(s=>({reps:num(s.reps),load:num(s.load)}))})).filter(en=>en.sets.length);
+  if(!entries.length){toast('Enter reps for at least one set');return null}
+  const rec={athleteId:aid,date:d.date,planId:d.planId||'',entries,engagement:d.engagement||0,effort:d.effort?Number(d.effort):'',notes:d.notes||''};
+  const i=id&&id!=='new'?db.sessions.findIndex(s=>s.id===id):-1;
+  rec.id=i>=0?id:uid();if(i>=0)db.sessions[i]=rec;else db.sessions.push(rec);
+  save();return rec.id;
+}
+
+/* ---------- group session ---------- */
+function vGroupSetup(q){
+  const want=(q||'').replace('plan=','');
+  if(!draft||!draft.group){const lib=libPlans();draft={key:'g',group:true,data:{date:today(),planId:(lib.find(p=>p.id===want)||lib[0]||{}).id||'',ids:[],cur:null,s:{},done:{},skip:{}}}}
+  const g=draft.data;const lib=libPlans();
+  const list=db.athletes.slice().sort((x,y)=>x.name.localeCompare(y.name));
+  return{bar:`${back('#')}<h1>Group session</h1><button class="primary" data-act="g-start">Start</button>`,
+  body:`<section class="panel form">
+    <div class="two">
+      <div class="field"><label for="g_date">Date</label><input id="g_date" type="date" data-f="date" value="${esc(g.date)}"></div>
+      <div class="field"><label for="g_plan">Plan</label><select id="g_plan" data-f="planId"><option value="">Custom</option>${lib.map(p=>`<option value="${p.id}" ${p.id===g.planId?'selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
+    </div>
+    ${lib.length?`<span class="muted small">Each athlete starts from this plan with loads from their own last session. You can still change exercises for anyone.</span>`:`<span class="muted small">No library plans yet. <button class="ghost" data-go="#plan/${SHARED}/new" style="min-height:0;padding:0">Build one</button> to prefill everyone's exercises.</span>`}
+  </section>
+  <section class="panel">
+    <div class="row"><h2 class="grow">Who's training?</h2><button class="ghost" data-act="g-all">${g.ids.length===list.length&&list.length?'Clear':'Select all'}</button></div>
+    <span class="muted small">Tap in the order you'll log them.</span>
+    <div class="list">${list.map(a=>{const n=g.ids.indexOf(a.id);return`<button class="item" aria-pressed="${n>=0}" data-act="g-toggle" data-id="${a.id}" style="${n>=0?'border-color:var(--accent);background:var(--accent-soft)':''}">
+      <div class="row"><strong class="grow">${esc(a.name)}</strong>${n>=0?`<span class="chip ex num">${n+1}</span>`:'<span class="chip">Tap to add</span>'}</div>
+      ${a.precautions?`<span class="small" style="color:var(--red)">⚠ ${esc(a.precautions.split('\n')[0])}</span>`:''}
+    </button>`}).join('')||'<div class="empty"><span>Add athletes first.</span></div>'}</div>
+  </section>`};
+}
+function gNext(g){const o=g.ids;const start=Math.max(0,o.indexOf(g.cur));for(let k=1;k<=o.length;k++){const id=o[(start+k)%o.length];if(!g.done[id]&&!g.skip[id])return id}return null}
+function vGroupRun(){
+  if(!draft||!draft.group||!draft.data.ids.length)return vGroupSetup();
+  const g=draft.data;const n=g.ids.length;
+  const chips=`<div class="row" style="gap:6px">${g.ids.map(id=>{const a=ath(id);const st=g.done[id]?'ok':g.skip[id]?'':'ex';
+    return`<button class="chip ${st}" data-act="g-pick" data-id="${id}" aria-pressed="${id===g.cur}" style="min-height:34px;border:${id===g.cur?'2px solid var(--accent)':'1px solid transparent'}">${g.done[id]?'✓ ':g.skip[id]?'– ':''}${esc(a?a.name.split(' ')[0]:'?')}</button>`}).join('')}</div>`;
+  if(!g.cur||!ath(g.cur)){
+    const saved=g.ids.filter(id=>g.done[id]).length;
+    return{bar:`<button class="ghost icon" data-act="g-back" aria-label="Back">&larr;</button><h1>Group session</h1>`,
+    body:`<section class="panel"><h2>${saved} of ${n} logged</h2><span class="muted small">${fmtDL(g.date)}</span>
+      <div class="list">${g.ids.map(id=>{const a=ath(id);return`<div class="row"><span class="grow">${esc(a.name)}</span>${g.done[id]?'<span class="chip ok">Saved</span>':`<span class="chip">Skipped</span><button data-act="g-pick" data-id="${id}">Log now</button>`}</div>`}).join('')}</div>
+      <div class="row"><button class="primary" data-act="g-finish">Done</button></div></section>`};
+  }
+  const aid=g.cur,a=ath(aid),d=g.s[aid];const pos=g.ids.indexOf(aid)+1;
+  return{bar:`<button class="ghost icon" data-act="g-back" aria-label="Back">&larr;</button><h1>Group · ${pos} of ${n}</h1><span class="muted small num">${fmtD(g.date)}</span>`,
+  body:`${chips}
+  <section class="panel">
+    <div class="row"><h2 class="grow">${esc(a.name)}</h2>${g.done[aid]?'<span class="chip ok">Saved</span>':''}</div>
+    ${a.precautions?`<div class="alert"><span class="label" style="color:var(--red)">Precautions</span><div class="pre small">${esc(a.precautions)}</div></div>`:''}
+    ${a.communication?`<div class="note"><span class="label">Communication</span><div class="pre small">${esc(a.communication)}</div></div>`:''}
+  </section>
+  ${sessionForm(aid,d,`s.${aid}.`,true)}
+  <div class="row"><button data-act="g-skip">Skip for now</button><button class="primary grow" data-act="g-save">${g.done[aid]?'Update':'Save'} &amp; next</button></div>`};
+}
+
+/* ---------- settings ---------- */
+function vSettings(){
+  const ex=db.athletes.filter(a=>a.example).length;
+  return{bar:`${back('#')}<h1>Backup &amp; settings</h1>`,body:`
+  <section class="panel">
+    <h2>Backup</h2>
+    <span class="small">Everything lives in this browser on this phone and never leaves it. Clearing Chrome's site data or losing the phone erases it, so export a backup every week or two and keep it somewhere safe.</span>
+    <span class="small muted num">Last backup: ${db.lastBackup?fmtDL(db.lastBackup):'never'}</span>
+    <div class="row"><button class="primary" data-act="export">Export backup</button><button data-act="import">Restore from backup</button></div>
+  </section>
+  <section class="panel">
+    <h2>Units</h2>
+    <div class="row">${['lb','kg'].map(u=>`<button aria-pressed="${db.unit===u}" class="${db.unit===u?'primary':''}" data-act="unit" data-v="${u}">${u}</button>`).join('')}</div>
+    <span class="muted small">Changes the label only. Logged numbers are not converted.</span>
+  </section>
+  ${ex?`<section class="panel"><h2>Sample data</h2><span class="small">Remove the example athlete, plan and sessions.</span><div><button class="danger" data-act="clear-ex">Remove sample data</button></div></section>`:''}
+  <section class="panel"><h2>Erase everything</h2><span class="small">Deletes all athletes, plans and sessions on this phone.</span><div><button class="danger" data-act="wipe">Erase all data</button></div></section>`};
+}
+
+/* ---------- events ---------- */
+function setPath(obj,path,val){const ks=path.split('.');let o=obj;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=val}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.f&&draft)setPath(draft.data,t.dataset.f,t.dataset.num?Number(t.value):t.value)});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.f&&draft)setPath(draft.data,t.dataset.f,t.dataset.num?Number(t.value):t.value);
+  if(t.dataset.actChange==='pick-plan'&&draft){const sd=curSess();const p=db.plans.find(x=>x.id===t.value);sd.planId=t.value;
+    const hasData=sd.entries.some(en=>en.name);if(p||!hasData)sd.entries=entriesFromPlan(p,t.dataset.aid);render()}
+});
+const curSess=()=>draft&&(draft.group?draft.data.s[draft.data.cur]:draft.data);
+function armed(btn,label){if(btn.classList.contains('armed'))return true;btn.classList.add('armed');const old=btn.textContent;btn.textContent=label||'Tap again to confirm';
+  setTimeout(()=>{btn.classList.remove('armed');btn.textContent=old},3500);return false}
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');if(g){draft=null;go(g.dataset.go);return}
+  const r=e.target.closest('[data-replace]');if(r){replaceTo(r.dataset.replace);return}
+  const b=e.target.closest('[data-act]');if(!b)return;const A=b.dataset.act,d=draft&&draft.data;
+  switch(A){
+    case 'save-athlete':{const id=b.dataset.id;const data={...d};if(!String(data.name||'').trim()){toast('Add a name to save');return}
+      for(const[k]of AF)data[k]=String(data[k]||'').trim();
+      if(id==='new'){data.id=uid();data.created=today();db.athletes.push(data)}else{Object.assign(ath(id),data)}
+      save();toast('Profile saved');replaceTo('#athlete/'+(id==='new'?data.id:id));break}
+    case 'del-athlete':{if(!armed(b,'Tap again to delete'))return;const id=b.dataset.id;
+      db.athletes=db.athletes.filter(a=>a.id!==id);db.plans=db.plans.filter(p=>p.athleteId!==id);db.sessions=db.sessions.filter(s=>s.athleteId!==id);
+      save();toast('Athlete deleted');replaceTo('#');break}
+    case 'ex-add':d.exercises.push({id:uid(),name:'',sets:3,reps:5,load:'',notes:''});render();break;
+    case 'ex-rm':d.exercises.splice(+b.dataset.i,1);render();break;
+    case 'save-plan':{const aid=b.dataset.a,id=b.dataset.id;if(!d.name.trim()){toast('Name the plan to save');return}
+      d.exercises=d.exercises.filter(x=>String(x.name).trim()).map(x=>({...x,name:x.name.trim(),sets:num(x.sets)||1,reps:num(x.reps)||1,load:num(x.load)}));
+      if(!d.exercises.length){toast('Add at least one exercise');return}
+      if(id==='new'){d.id=uid();d.athleteId=aid;db.plans.push(d)}else{const i=db.plans.findIndex(p=>p.id===id);db.plans[i]={...d,id,athleteId:aid}}
+      save();toast(aid===SHARED?'Library plan saved':'Plan saved');replaceTo(aid===SHARED?'#library':'#athlete/'+aid+'/plans');break}
+    case 'del-plan':{if(!armed(b,'Tap again to delete'))return;const pa=b.dataset.a;db.plans=db.plans.filter(p=>p.id!==b.dataset.id);save();toast('Plan deleted');replaceTo(pa===SHARED?'#library':'#athlete/'+pa+'/plans');break}
+    case 'en-add':{const sd=curSess();sd.entries.push({name:'',assist:0,sets:[{reps:'',load:''}]});render();break}
+    case 'en-rm':curSess().entries.splice(+b.dataset.i,1);render();break;
+    case 'set-add':{const en=curSess().entries[+b.dataset.i];const last=en.sets[en.sets.length-1]||{reps:'',load:''};en.sets.push({...last});render();break}
+    case 'set-rm':curSess().entries[+b.dataset.i].sets.splice(+b.dataset.j,1);render();break;
+    case 'eng':{const sd=curSess();sd.engagement=sd.engagement===+b.dataset.v?0:+b.dataset.v;render();break}
+    case 'save-session':{const aid=b.dataset.a;if(!saveSession(aid,d,b.dataset.id))return;toast('Session saved');replaceTo('#athlete/'+aid+'/log');break}
+    case 'g-toggle':{const id=b.dataset.id,i=d.ids.indexOf(id);if(i>=0)d.ids.splice(i,1);else d.ids.push(id);render();break}
+    case 'g-all':{const all=db.athletes.slice().sort((x,y)=>x.name.localeCompare(y.name)).map(a=>a.id);d.ids=d.ids.length===all.length?[]:all;render();break}
+    case 'g-start':{if(!d.date){toast('Pick a date');return}if(!d.ids.length){toast('Pick at least one athlete');return}
+      const p=db.plans.find(x=>x.id===d.planId);
+      for(const id of d.ids){if(!d.s[id]||(!d.done[id]&&d.s[id].planId!==d.planId))d.s[id]={date:d.date,planId:d.planId,entries:entriesFromPlan(p,id),engagement:0,effort:'',notes:''};d.s[id].date=d.date}
+      for(const id of Object.keys(d.s))if(!d.ids.includes(id)&&!d.done[id])delete d.s[id];
+      d.cur=d.ids.find(id=>!d.done[id])||d.ids[0];delete d.skip[d.cur];go('#group/run');break}
+    case 'g-save':{const aid=d.cur;d.s[aid].date=d.date;const id=saveSession(aid,d.s[aid],d.done[aid]);if(!id)return;
+      d.done[aid]=id;toast(`${ath(aid).name.split(' ')[0]} saved`);d.cur=gNext(d);render();window.scrollTo(0,0);break}
+    case 'g-skip':{d.skip[d.cur]=true;d.cur=gNext(d);render();window.scrollTo(0,0);break}
+    case 'g-pick':{d.cur=b.dataset.id;delete d.skip[d.cur];render();window.scrollTo(0,0);break}
+    case 'g-back':history.back();break;
+    case 'g-finish':replaceTo('#');break;
+    case 'del-session':{if(!armed(b,'Tap again to delete'))return;db.sessions=db.sessions.filter(s=>s.id!==b.dataset.id);save();toast('Session deleted');replaceTo('#athlete/'+b.dataset.a+'/log');break}
+    case 'unit':db.unit=b.dataset.v;save();render();break;
+    case 'export':{db.lastBackup=today();save();const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`adaptive-lift-log-backup-${today()}.json`;document.body.appendChild(a);a.click();
+      setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Backup saved to Downloads');render();break}
+    case 'import':$('#importFile').click();break;
+    case 'clear-ex':{if(!armed(b,'Tap again to remove'))return;const ids=db.athletes.filter(a=>a.example).map(a=>a.id);
+      db.athletes=db.athletes.filter(a=>!a.example);db.plans=db.plans.filter(p=>!ids.includes(p.athleteId));db.sessions=db.sessions.filter(s=>!ids.includes(s.athleteId));
+      save();toast('Sample data removed');render();break}
+    case 'wipe':{if(!armed(b,'Tap again to erase all'))return;db={v:1,unit:db.unit,lastBackup:null,athletes:[],plans:[],sessions:[]};save();toast('All data erased');replaceTo('#');break}
+  }
+});
+$('#importFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();
+  rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.athletes)||!Array.isArray(d.plans)||!Array.isArray(d.sessions))throw 0;
+    db=d;save();toast(`Restored ${d.athletes.length} athlete${d.athletes.length===1?'':'s'}`);replaceTo('#')}
+    catch(_){toast('That file is not an Adaptive Lift Log backup')}e.target.value=''};rd.readAsText(f)});
+render();
+if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().catch(()=>{})}
+</script>
+</body>
+</html>
